@@ -19,8 +19,9 @@ defmodule MnesiaMaster.MasterWorker do
   end
 
   def init_mnesia(nodes) do
-
-    with false <- schema_exist?(nodes),
+    IO.inspect("init mnesia")
+    with :ok <- start_mnesia(nodes),
+         false <- schema_exist?(nodes),
          :ok <- stop_mnesia(nodes),
          :ok <- :mnesia.create_schema(nodes) |> IO.inspect(),
          :ok <- start_mnesia(nodes),
@@ -35,8 +36,13 @@ defmodule MnesiaMaster.MasterWorker do
   end
 
   def schema_exist?(nodes) do
-    exist_nodes = :mnesia.table_info(:schema, :disc_copies)
-    MapSet.equal?(MapSet.new(nodes), exist_nodes)
+    IO.inspect("schema_exist?")
+    try do
+      exist_nodes = :mnesia.table_info(:schema, :disc_copies) |> IO.inspect
+      MapSet.equal?(MapSet.new(nodes), exist_nodes)
+    rescue
+      _ -> false
+    end
   end
 
   def stop_mnesia(nodes) do
