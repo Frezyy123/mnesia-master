@@ -19,8 +19,9 @@ defmodule MnesiaMaster.MasterWorker do
   end
 
   def init_mnesia(nodes) do
-    stop_mnesia(nodes)
+
     with false <- schema_exist?(nodes),
+         :ok <- stop_mnesia(nodes),
          :ok <- :mnesia.create_schema(nodes) |> IO.inspect(),
          :ok <- start_mnesia(nodes),
          :ok <- register_mnesia(nodes),
@@ -42,6 +43,7 @@ defmodule MnesiaMaster.MasterWorker do
     remain_nodes = Enum.reject(nodes, fn node_name -> node_name == node() end)
     :rpc.multicall(remain_nodes, PusherDb.Utils, :stop_mnesia, []) |> IO.inspect(label: "multicall stop")
     :mnesia.stop
+    :ok
   end
 
   def start_mnesia(nodes) do
