@@ -6,7 +6,6 @@ defmodule MnesiaMaster.MasterWorker do
 
   def init(_) do
     :net_kernel.monitor_nodes(true, [])
-    send(self(), :init_master)
     Enum.each(@nodes, fn node -> Node.monitor(node, true) end)
     if node() in @nodes do
       init_mnesia(@nodes)
