@@ -10,36 +10,39 @@ defmodule PusherDbClient.ConfigWorker do
   end
 
   def init(_) do
+    :ets.new(:nodes, [:named_table])
     send(self(), :read_config)
     {:ok, %{nodes: MapSet.new()}}
   end
 
   def handle_info(:read_config, %{nodes: nodes} = state) do
-    # list_of_nodes =
-    #   try do
-    #     {:ok, parse_result} = ConfigParser.parse_file(@path)
+    list_of_nodes =
+      try do
+        {:ok, parse_result} = ConfigParser.parse_file(@path)
 
-    #     get_values(parse_result, @section)
-    #     |> Enum.filter(fn node -> alive_node?(node) end)
-    #     |> MapSet.new()
-    #   rescue
-    #     e ->
-    #       Logger.error("Can't find config file #{inspect(e)}, create it!")
-    #       []
-    #   end
+        get_values(parse_result, @section)
+        |> Enum.filter(fn node -> alive_node?(node) end)
+        |> MapSet.new()
+      rescue
+        e ->
+          Logger.error("Can't find config file #{inspect(e)}, create it!")
+          []
+      end
 
-    # GenServer.cast(NodeWorker, {:update_from_config, list_of_nodes})
-    # Process.send_after(self(), :read_config, @period_read_config)
+    new_nodes =
+      if MapSet.equal?(list_of_nodes, nodes) do
+        nodes
+      else
+        up_nodes =
+          Enum.map(MapSet.difference(list_of_nodes, nodes), fn node ->
+            add_node_to_cluster(node)
+          end)
 
-    # new_nodes = if MapSet.equal?(list_of_nodes, nodes) do
-    #   nodes
-    # else
-    #   up_nodes = Enum.map(MapSet.difference(list_of_nodes, nodes), fn node -> add_node_to_cluster(node) end)
-    #   up_nodes ++ nodes
-    # end
+        [up_nodes | nodes]
+      end
 
-    # {:noreply, %{state | nodes: new_nodes}}
-    {:noreply, state}
+    Process.send_after(self(), :read_config, @period_read_config)
+    {:noreply, %{state | nodes: new_nodes}}
   end
 
   @spec alive_node?(atom()) :: boolean()
@@ -64,6 +67,7 @@ defmodule PusherDbClient.ConfigWorker do
       end
     end)
   end
+
   def add_node_to_cluster(node) do
     GenServer.cast(MnesiaMaster.MasterWorker, {:add_nodes_from_config, node})
   end
