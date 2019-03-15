@@ -10,7 +10,6 @@ defmodule PusherDbClient.ConfigWorker do
   end
 
   def init(_) do
-    :ets.new(:nodes, [:named_table])
     send(self(), :read_config)
     {:ok, %{nodes: MapSet.new()}}
   end
@@ -33,8 +32,8 @@ defmodule PusherDbClient.ConfigWorker do
       if MapSet.equal?(list_of_nodes, nodes) do
         nodes
       else
-        up_nodes =
-          Enum.map(MapSet.difference(list_of_nodes, nodes), fn node ->
+        up_nodes = MapSet.difference(list_of_nodes, nodes)
+          Enum.map(up_nodes, fn node ->
             add_node_to_cluster(node)
           end)
 
