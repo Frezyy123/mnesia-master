@@ -1,0 +1,3 @@
+%{
+  "configparser_ex": {:hex, :configparser_ex, "2.0.1", "71a002cbb220ad8a2d31a9cbedd590ddcee30534fb1513fe4545c64d417847c5", [:mix], [], "hexpm"},
+}
