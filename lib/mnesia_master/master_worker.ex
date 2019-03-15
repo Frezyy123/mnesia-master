@@ -8,7 +8,8 @@ defmodule MnesiaMaster.MasterWorker do
     :net_kernel.monitor_nodes(true, [])
     Enum.each(@nodes, fn node -> Node.monitor(node, true) end)
     if node() in @nodes do
-      init_mnesia(@nodes)
+      nodes = [node() | Node.list] |> IO.inspect
+      init_mnesia(nodes)
       send(self(), :register_name)
     end
     {:ok, %{nodes: @nodes}}
@@ -21,6 +22,7 @@ defmodule MnesiaMaster.MasterWorker do
   def init_mnesia(nodes) do
     IO.inspect("init mnesia")
     with :ok <- start_mnesia(nodes),
+         :ok <- :mnesia.wait_for_tables([:schema], 5000),
          false <- schema_exist?(nodes),
          :ok <- stop_mnesia(nodes),
          :ok <- :mnesia.create_schema(nodes) |> IO.inspect(),
@@ -38,26 +40,26 @@ defmodule MnesiaMaster.MasterWorker do
   def schema_exist?(nodes) do
     IO.inspect("schema_exist?")
     try do
-      exist_nodes = :mnesia.table_info(:schema, :disc_copies) |> IO.inspect
-      MapSet.equal?(MapSet.new(nodes), exist_nodes)
+      exist_nodes = :mnesia.table_info(:schema, :active_replicas) |> IO.inspect(label: "Mnesia nodes")
+      nodes |> IO.inspect(label: "List of nodes")
+      MapSet.equal?(MapSet.new(nodes), MapSet.new(exist_nodes)) |> IO.inspect
     rescue
       _ -> false
     end
   end
 
   def stop_mnesia(nodes) do
-    remain_nodes = Enum.reject(nodes, fn node_name -> node_name == node() end)
-    :rpc.multicall(remain_nodes, PusherDb.Utils, :stop_mnesia, []) |> IO.inspect(label: "multicall stop")
-    :mnesia.stop
-    :ok
+    case :rpc.multicall(nodes, PusherDb.Utils, :stop_mnesia, []) do
+      {_, [_ | _]} -> :error
+      {_, []} -> :ok
+    end
   end
 
   def start_mnesia(nodes) do
-    remain_nodes = Enum.reject(nodes, fn node_name -> node_name == node() end)
-    :mnesia.start
-    :rpc.multicall(remain_nodes, PusherDb.Utils, :start_mnesia, []) |> IO.inspect(label: "multicall start")
-    :ok
-
+    case :rpc.multicall(nodes, PusherDb.Utils, :start_mnesia, []) do
+      {_, [_ | _]} -> :error
+      {_, []} -> :ok
+    end
   end
 
   def register_mnesia(nodes) do
@@ -86,7 +88,7 @@ defmodule MnesiaMaster.MasterWorker do
   end
 
   def handle_info({:nodedown, node}, %{nodes: nodes} = state) do
-    Logger.error("Node down #{inspect(node)}")
+    # Logger.error("Node down #{inspect(node)}")
     Node.monitor(node, true)
     remain_nodes = Enum.reject(nodes, fn node_name -> node_name == node end)
     {:noreply, %{state | nodes: remain_nodes}}
