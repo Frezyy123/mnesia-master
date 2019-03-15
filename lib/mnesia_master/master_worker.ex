@@ -1,6 +1,6 @@
 defmodule MnesiaMaster.MasterWorker do
   use GenServer
-  @nodes []
+  @nodes [:"main@127.0.0.1", :"replica@127.0.0.1", :"replica2@127.0.0.1"]
   require Logger
 
   def init(_) do
@@ -24,18 +24,18 @@ defmodule MnesiaMaster.MasterWorker do
   end
 
   def stop_mnesia(nodes) do
-    :rpc.multicall(nodes, PusherDb.Utils, :stop_mnesia, [])
+    :rpc.multicall(nodes, PusherDb.Utils, :stop_mnesia, []) |> IO.inspect
   end
 
   def start_mnesia(nodes) do
-    :rpc.multicall(nodes, PusherDb.Utils, :start_mnesia, [])
+    :rpc.multicall(nodes, PusherDb.Utils, :start_mnesia, []) |> IO.inspect
   end
 
   def handle_info({:nodeup, node}, %{nodes: nodes} = state) do
     Logger.info("Node up #{inspect(node)}")
     if node not in :mnesia.table_info(:offers, :rocksdb_copies) do
-      :mnesia.change_config(:extra_db_nodes, [node])
-      :mnesia.add_table_copy(:offers, node, :rocksdb_copies)
+      :mnesia.change_config(:extra_db_nodes, [node]) |> IO.inspect(label: "#{node}")
+      :mnesia.add_table_copy(:offers, node, :rocksdb_copies) |> IO.inspect(label: "#{node}")
     end
     {:noreply, %{state | nodes: [node | nodes]}}
   end
