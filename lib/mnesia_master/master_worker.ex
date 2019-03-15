@@ -7,7 +7,8 @@ defmodule MnesiaMaster.MasterWorker do
     :net_kernel.monitor_nodes(true, [])
     Enum.each(@nodes, fn node -> Node.monitor(node, true) end)
     init_mnesia(@nodes)
-    :global.register_name(MasterMnesia, self())
+    send(self(),:register_name)
+
     {:ok, %{nodes: @nodes}}
   end
 
@@ -36,8 +37,13 @@ defmodule MnesiaMaster.MasterWorker do
       :mnesia.change_config(:extra_db_nodes, [node])
       :mnesia.add_table_copy(:offers, node, :rocksdb_copies)
     end
-
     {:noreply, %{state | nodes: [node | nodes]}}
+  end
+
+  def handle_info(:register_name, state) do
+    :global.register_name(MasterWorker, self())
+
+    {:noreply, state}
   end
 
   def handle_info({:nodedown, node}, %{nodes: nodes} = state) do
