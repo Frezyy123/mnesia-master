@@ -8,6 +8,10 @@ defmodule MnesiaMaster.Application do
   def start(_type, _args) do
     # List all child processes to be supervised
     children = [
+
+      %{id: MnesiaMaster.ConfigWorker, start: {MnesiaMaster.ConfigWorker, :start_link, []}},
+      %{id: MnesiaMaster.MasterWorker, start: {MnesiaMaster.MasterWorker, :start_link, []}}
+
       # Starts a worker by calling: MnesiaMaster.Worker.start_link(arg)
       # {MnesiaMaster.Worker, arg},
     ]

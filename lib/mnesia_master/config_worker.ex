@@ -1,4 +1,4 @@
-defmodule PusherDbClient.ConfigWorker do
+defmodule MnesiaMaster.ConfigWorker do
   use GenServer
   require Logger
 
@@ -28,16 +28,19 @@ defmodule PusherDbClient.ConfigWorker do
           []
       end
 
-    GenServer.cast(NodeWorker, {:update_from_config, list_of_nodes})
+    new_nodes =
+      if MapSet.equal?(list_of_nodes, nodes) do
+        nodes
+      else
+        up_nodes = MapSet.difference(list_of_nodes, nodes)
+          Enum.map(up_nodes, fn node ->
+            add_node_to_cluster(node)
+          end)
+
+        [up_nodes | nodes]
+      end
+
     Process.send_after(self(), :read_config, @period_read_config)
-
-    new_nodes = if MapSet.equal?(list_of_nodes, nodes) do
-      nodes
-    else
-      up_nodes = Enum.map(MapSet.difference(list_of_nodes, nodes), fn node -> add_node_to_cluster(node) end)
-      up_nodes ++ nodes
-    end
-
     {:noreply, %{state | nodes: new_nodes}}
   end
 
@@ -63,6 +66,7 @@ defmodule PusherDbClient.ConfigWorker do
       end
     end)
   end
+
   def add_node_to_cluster(node) do
     GenServer.cast(MnesiaMaster.MasterWorker, {:add_nodes_from_config, node})
   end

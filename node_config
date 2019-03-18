@@ -1,2 +1,2 @@
 [nodes configuration]
-nodes = :"main@127.0.0.1", :"replica@127.0.0.1"
+nodes = main@127.0.0.1, replica@127.0.0.1, replica2@127.0.0.1
