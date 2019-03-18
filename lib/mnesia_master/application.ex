@@ -11,6 +11,7 @@ defmodule MnesiaMaster.Application do
 
       %{id: PusherDbClient.ConfigWorker, start: {PusherDbClient.ConfigWorker, :start_link, []}},
       %{id: MnesiaMaster.MasterWorker, start: {MnesiaMaster.MasterWorker, :start_link, []}}
+
       # Starts a worker by calling: MnesiaMaster.Worker.start_link(arg)
       # {MnesiaMaster.Worker, arg},
     ]

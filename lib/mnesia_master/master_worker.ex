@@ -70,33 +70,30 @@ defmodule MnesiaMaster.MasterWorker do
   end
 
   def register_mnesia(nodes) do
-    remain_nodes = Enum.reject(nodes, fn node_name -> node_name == node() end)
-    :mnesia_rocksdb.register()
-
-    :rpc.multicall(remain_nodes, PusherDb.Utils, :register_mnesia, [])
-    |> IO.inspect(label: "multicall register")
-
-    :ok
+    case :rpc.multicall(nodes, PusherDb.Utils, :register_mnesia, []) do
+      {_, [_ | _]} -> :error
+      {_, []} -> :ok
+    end
   end
 
   def handle_info({:nodeup, new_node}, %{nodes: nodes} = state) do
     Logger.info("Node up #{inspect(new_node)}")
 
     try do
-      if new_node not in :mnesia.table_info(:offers, :rocksdb_copies) |> IO.inspect do
-        :mnesia.change_config(:extra_db_nodes, [new_node]) |> IO.inspect(label: "#{new_node}")
-        :mnesia.wait_for_tables(:schema, 5000)
+      Logger.info("Add node #{new_node} to cluster")
 
-        :mnesia.change_table_copy_type(:schema, new_node, :disc_copies)
-        |> IO.inspect(label: "#{new_node}")
-
-        :mnesia.add_table_copy(:offers, new_node, :rocksdb_copies)
-        |> IO.inspect(label: "#{new_node}")
-
+      with true <- new_node not in :mnesia.table_info(:offers, :rocksdb_copies),
+           {:ok, _} <- :mnesia.change_config(:extra_db_nodes, [new_node]),
+           :ok <- :mnesia.wait_for_tables([:schema], 5000),
+           {:atomic, :ok} <- :mnesia.change_table_copy_type(:schema, new_node, :disc_copies),
+           {:atomic, :ok} <- :mnesia.add_table_copy(:offers, new_node, :rocksdb_copies) do
         Node.monitor(new_node, true)
+      else
+        e -> Logger.error("Can't add node to cluser, reason: #{inspect(e)}")
       end
     catch
-      :exit, reason -> Logger.debug("#{inspect(reason)}")
+      :exit, reason ->
+        Logger.debug("#{inspect(reason)}")
         :ok
     end
 

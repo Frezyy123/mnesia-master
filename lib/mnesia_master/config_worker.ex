@@ -1,4 +1,4 @@
-defmodule PusherDbClient.ConfigWorker do
+defmodule MnesiaMaster.ConfigWorker do
   use GenServer
   require Logger
 
