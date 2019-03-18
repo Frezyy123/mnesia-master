@@ -7,11 +7,13 @@ defmodule MnesiaMaster.MasterWorker do
   def init(_) do
     :net_kernel.monitor_nodes(true, [])
     Enum.each(@nodes, fn node -> Node.monitor(node, true) end)
+
     if node() in @nodes do
-      nodes = [node() | Node.list] |> IO.inspect
+      nodes = [node() | Node.list()] |> IO.inspect()
       init_mnesia(nodes)
       send(self(), :register_name)
     end
+
     {:ok, %{nodes: @nodes}}
   end
 
@@ -21,6 +23,7 @@ defmodule MnesiaMaster.MasterWorker do
 
   def init_mnesia(nodes) do
     IO.inspect("init mnesia")
+
     with :ok <- start_mnesia(nodes),
          :ok <- :mnesia.wait_for_tables([:schema], 5000),
          false <- schema_exist?(nodes),
@@ -31,18 +34,22 @@ defmodule MnesiaMaster.MasterWorker do
          {:atomic, :ok} <- :mnesia.create_table(:offers, [{:rocksdb_copies, nodes}]) do
       :ok
     else
-      _ -> start_mnesia(nodes)
-           register_mnesia(nodes)
-           :error
+      _ ->
+        start_mnesia(nodes)
+        register_mnesia(nodes)
+        :error
     end
   end
 
   def schema_exist?(nodes) do
     IO.inspect("schema_exist?")
+
     try do
-      exist_nodes = :mnesia.table_info(:schema, :active_replicas) |> IO.inspect(label: "Mnesia nodes")
+      exist_nodes =
+        :mnesia.table_info(:schema, :active_replicas) |> IO.inspect(label: "Mnesia nodes")
+
       nodes |> IO.inspect(label: "List of nodes")
-      MapSet.equal?(MapSet.new(nodes), MapSet.new(exist_nodes)) |> IO.inspect
+      MapSet.equal?(MapSet.new(nodes), MapSet.new(exist_nodes)) |> IO.inspect()
     rescue
       _ -> false
     end
@@ -65,17 +72,32 @@ defmodule MnesiaMaster.MasterWorker do
   def register_mnesia(nodes) do
     remain_nodes = Enum.reject(nodes, fn node_name -> node_name == node() end)
     :mnesia_rocksdb.register()
-    :rpc.multicall(remain_nodes, PusherDb.Utils, :register_mnesia, []) |> IO.inspect(label: "multicall register")
+
+    :rpc.multicall(remain_nodes, PusherDb.Utils, :register_mnesia, [])
+    |> IO.inspect(label: "multicall register")
+
     :ok
   end
 
   def handle_info({:nodeup, new_node}, %{nodes: nodes} = state) do
     Logger.info("Node up #{inspect(new_node)}")
 
-    if new_node not in :mnesia.table_info(:offers, :rocksdb_copies) do
-      :mnesia.change_config(:extra_db_nodes, [new_node]) |> IO.inspect(label: "#{new_node}")
-      :mnesia.change_table_copy_type(:schema, new_node, :disc_copies) |> IO.inspect(label: "#{new_node}")
-      :mnesia.add_table_copy(:offers, new_node, :rocksdb_copies) |> IO.inspect(label: "#{new_node}")
+    try do
+      if new_node not in :mnesia.table_info(:offers, :rocksdb_copies) |> IO.inspect do
+        :mnesia.change_config(:extra_db_nodes, [new_node]) |> IO.inspect(label: "#{new_node}")
+        :mnesia.wait_for_tables(:schema, 5000)
+
+        :mnesia.change_table_copy_type(:schema, new_node, :disc_copies)
+        |> IO.inspect(label: "#{new_node}")
+
+        :mnesia.add_table_copy(:offers, new_node, :rocksdb_copies)
+        |> IO.inspect(label: "#{new_node}")
+
+        Node.monitor(new_node, true)
+      end
+    catch
+      :exit, reason -> Logger.debug("#{inspect(reason)}")
+        :ok
     end
 
     {:noreply, %{state | nodes: [new_node | nodes]}}
